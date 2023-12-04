@@ -1,0 +1,45 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: nette
+  - override /model: vit_tiny
+  - override /callbacks: default
+  - override /trainer: ddp
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["nette", "vit"]
+
+seed: 10716
+
+trainer:
+  min_epochs: 3
+  max_epochs: 50
+  gradient_clip_val: 0.5
+  deterministic: True
+  # check_val_every_n_epoch: 10
+  devices: [0,1,2,3,4,5,6,7]
+  # enable_checkpointing: False
+  # limit_test_batches: 0
+  precision: "transformer-engine"
+
+model:
+  optimizer:
+    lr: 0.002
+  compile: false
+
+data:
+  batch_size: 128
+
+logger:
+  wandb:
+    project: "ViT-baseline"
+    entity: "dota109"
+    tags: ${tags}
+    group: "nette"
+  aim:
+    experiment: "nette"
