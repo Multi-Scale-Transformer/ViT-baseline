@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: nette
-  - override /model: vit_tiny
+  - override /model: soft_group
   - override /callbacks: default
   - override /trainer: ddp
 
@@ -29,7 +29,7 @@ trainer:
 
 model:
   optimizer:
-    lr: 0.002
+    lr: 0.0004
   compile: false
 
 data:
