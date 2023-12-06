@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
+import torch.nn.functional as F
 class PatchEmbedding(nn.Module):
     def __init__(self, image_size, patch_size, dim, channels):
         super().__init__()
@@ -18,6 +19,18 @@ class PatchEmbedding(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)  # (B, 1, D) + (B, N, D) -> (B, N+1, D)
         x += self.pos_embedding
         return x
+
+class SeparableConv2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, bias=False):
+        super(SeparableConv2d, self).__init__()
+
+        self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, dilation, groups=in_channels, bias=bias)
+        self.pointwise_conv = nn.Conv2d(in_channels, out_channels, 1, 1, 0, 1, 1, bias=bias)
+
+    def forward(self, x):
+        x = self.pointwise_conv(self.conv1(x))
+        return x
+
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, dim, num_heads, dropout):
@@ -58,7 +71,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class SoftGroupAttention(nn.Module):
-    def __init__(self, dim, dropout=0.0):
+    def __init__(self, dim, dropout=0.0,gp_num=49):
         super().__init__()
         self.dim = dim
         self.scale = dim ** -0.5  # Scale factor for the dot products
@@ -66,7 +79,10 @@ class SoftGroupAttention(nn.Module):
         self.qkv = nn.Linear(dim, dim * 3)
         self.project = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
-        self.gp = nn.Linear(dim, 49, bias=False)
+        self.gp = nn.Linear(dim, gp_num, bias=False)
+        #self.Leakyrelu = nn.LeakyReLU() 
+        self.gelu = nn.GELU()
+        self.alpha = nn.Parameter(torch.randn(()))
         
         
     def forward(self, x):
@@ -78,19 +94,20 @@ class SoftGroupAttention(nn.Module):
         # Compute the dot products for the queries and keys (scaled)
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
         
-        min_val = torch.min(attn_scores, dim=-1, keepdim=True).values
-        max_val = torch.max(attn_scores, dim=-1, keepdim=True).values
+        # min_val = torch.min(attn_scores, dim=-1, keepdim=True).values
+        # max_val = torch.max(attn_scores, dim=-1, keepdim=True).values
 
-        eps = 1e-10
-        attn_scores = (attn_scores - min_val) / (max_val - min_val + eps)
-        
-        group_weight = self.gp(k)
+        # eps = 1e-10
+        # attn_scores = (attn_scores - min_val) / (max_val - min_val + eps)
+        group_weight = self.gp(v)
+        group_weight = self.gelu(group_weight)
         group_weight = F.softmax(group_weight, dim=-1)
         group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
+        
         attn_scores = attn_scores * group_weight
-        
-        
-        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn_scores = F.softmax(attn_scores, dim=-1)
+        alpha = torch.sigmoid(self.alpha)
+        attn_weights = (1 - alpha)*attn_scores + alpha*group_weight
         # Apply dropout to the attention weights
         attn_weights = self.dropout(attn_weights)
         
@@ -101,6 +118,7 @@ class SoftGroupAttention(nn.Module):
         out = self.project(attn_output)
         
         return out
+
 
 
 
@@ -119,10 +137,10 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 class TransformerBlock(nn.Module):
-    def __init__(self, dim, num_heads, mlp_dim, dropout):
+    def __init__(self, dim, num_heads, mlp_dim, dropout, gp_num=49, alpha=0.5):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim)
-        self.attn = SoftGroupAttention(dim, dropout)
+        self.attn = SoftGroupAttention(dim, dropout, gp_num=gp_num)
         self.norm2 = nn.LayerNorm(dim)
         self.ff = FeedForward(dim, mlp_dim, dropout)
 
@@ -134,7 +152,7 @@ class TransformerBlock(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, dim, depth, num_heads, mlp_dim, dropout):
         super().__init__()
-        self.layers = nn.ModuleList([TransformerBlock(dim, num_heads, mlp_dim, dropout) for _ in range(depth)])
+        self.layers = nn.ModuleList([TransformerBlock(dim, num_heads, mlp_dim, dropout, gp_num=49) for i in range(depth)])
         self.norm = nn.LayerNorm(dim)
 
     def forward(self, x):

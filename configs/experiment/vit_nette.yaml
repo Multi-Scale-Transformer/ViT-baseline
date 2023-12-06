@@ -41,5 +41,6 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
+    name: "牛牛"
   aim:
     experiment: "nette"
