@@ -22,7 +22,7 @@ trainer:
   gradient_clip_val: 0.5
   deterministic: True
   # check_val_every_n_epoch: 10
-  devices: [0,1,2,3,4,5,6,7]
+  devices: [4,5]
   # enable_checkpointing: False
   # limit_test_batches: 0
   precision: "transformer-engine"
