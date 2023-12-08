@@ -18,7 +18,9 @@ net:
   image_size: 224
   patch_size: 16
   dim: 192
-  heads: 3
+  heads: 1
+  mlp_dim: 768
+  dropout: 0.3
 
 
 

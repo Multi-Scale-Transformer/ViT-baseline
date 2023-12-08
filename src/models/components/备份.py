@@ -1,5 +1,4 @@
 import torch
-import math
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
 import torch.nn.functional as F
@@ -48,8 +47,8 @@ class MultiHeadAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.scale = self.head_dim ** -0.5
         # Initialize group parameter (gp)
-        self.gp = nn.Linear(dim, gp_num, bias=False)
-        # init.kaiming_uniform_(self.gp, a=math.sqrt(5))  # Xavier uniform initialization
+        self.gp = nn.Parameter(torch.empty(gp_num, self.num_heads, self.head_dim))
+        init.xavier_uniform_(self.gp)  # Xavier uniform initialization
         self.gelu = nn.GELU()
         self.alpha = nn.Parameter(torch.randn((1, self.num_heads,1,1)))
 
@@ -60,10 +59,15 @@ class MultiHeadAttention(nn.Module):
         
         q, k, v = qkv
         attn_weights = torch.matmul(q, k.transpose(-1,-2)) * self.scale
-        gp = self.gp.weight
-        gp = gp.unsqueeze(0).view(self.num_heads, self.gp_num, self.head_dim)
 
-        group_weight = torch.einsum('bhnd,hmd->bhnm', v, gp)
+
+        # Use the PyTorch 2.0 function for scaled dot-product attention
+        # attn = scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout.p)
+        
+        # Use the PyTorch 2.0 function for scaled dot-product attention
+        # attn = scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout.p)
+
+        group_weight = torch.einsum('bhnd,mhd->bhnm', v, self.gp)
         group_weight = self.gelu((group_weight))
         group_weight = F.softmax(group_weight, dim=-1)
         group_weight = torch.matmul(group_weight, group_weight.transpose(-2,-1))
@@ -182,7 +186,7 @@ class Transformer(nn.Module):
         return self.norm(x)
 
 class ViT(nn.Module):
-    def __init__(self, *, image_size=224, patch_size=16, num_classes=10, dim=192, depth=12, heads=3, mlp_dim=3072, channels=3, dropout=0.0, gp_num=49, attn_mode='multi'):
+    def __init__(self, *, image_size=224, patch_size=16, num_classes=10, dim=192, depth=12, heads=3, mlp_dim=3072, channels=3, dropout=0.0, gp_num=49, attn_mode='single'):
         super().__init__()
         self.patch_embedding = PatchEmbedding(image_size, patch_size, dim, channels)
         self.transformer = Transformer(dim, depth, heads, mlp_dim, dropout, gp_num=gp_num, attn_mode=attn_mode)

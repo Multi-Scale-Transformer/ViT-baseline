@@ -19,6 +19,7 @@ net:
   patch_size: 16
   dim: 192
   heads: 3
+  mlp_dim: 768
 
 
 

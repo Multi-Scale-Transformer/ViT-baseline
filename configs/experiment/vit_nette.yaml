@@ -41,6 +41,6 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "牛牛"
+    name: "多头牛牛0.3drop单头ver"
   aim:
     experiment: "nette"
