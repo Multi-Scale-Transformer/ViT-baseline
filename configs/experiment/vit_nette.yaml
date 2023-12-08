@@ -18,7 +18,7 @@ seed: 10716
 
 trainer:
   min_epochs: 3
-  max_epochs: 50
+  max_epochs: 100
   gradient_clip_val: 0.5
   deterministic: True
   # check_val_every_n_epoch: 10
@@ -41,6 +41,6 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "多头牛牛0.3drop单头ver"
+    name: "牛牛768+行和归一"
   aim:
     experiment: "nette"

@@ -126,6 +126,8 @@ class SoftGroupAttention(nn.Module):
         attn_scores = F.softmax(attn_scores, dim=-1)
         alpha = torch.sigmoid(self.alpha)
         attn_weights = (1 - alpha)*attn_scores + alpha*group_weight
+
+        attn_weights = attn_weights / (attn_weights.sum(dim=2, keepdim=True) + 1e-8)                
         # Apply dropout to the attention weights
         attn_weights = self.dropout(attn_weights)
         
@@ -182,7 +184,7 @@ class Transformer(nn.Module):
         return self.norm(x)
 
 class ViT(nn.Module):
-    def __init__(self, *, image_size=224, patch_size=16, num_classes=10, dim=192, depth=12, heads=3, mlp_dim=3072, channels=3, dropout=0.0, gp_num=49, attn_mode='multi'):
+    def __init__(self, *, image_size=224, patch_size=16, num_classes=10, dim=192, depth=12, heads=3, mlp_dim=3072, channels=3, dropout=0.0, gp_num=49, attn_mode='single'):
         super().__init__()
         self.patch_embedding = PatchEmbedding(image_size, patch_size, dim, channels)
         self.transformer = Transformer(dim, depth, heads, mlp_dim, dropout, gp_num=gp_num, attn_mode=attn_mode)

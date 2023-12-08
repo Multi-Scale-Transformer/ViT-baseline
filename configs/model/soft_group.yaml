@@ -21,6 +21,7 @@ net:
   heads: 1
   mlp_dim: 768
   dropout: 0.3
+  attn_mode: 'single'
 
 
 
