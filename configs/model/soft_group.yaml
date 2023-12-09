@@ -18,10 +18,10 @@ net:
   image_size: 224
   patch_size: 16
   dim: 192
-  heads: 1
+  heads: 3
   mlp_dim: 768
   dropout: 0.3
-  attn_mode: 'multi'
+  attn_mode: 'single'
 
 
 

@@ -41,6 +41,6 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "多头bruh"
+    name: "bruh错误dim norm+mean"
   aim:
     experiment: "nette"
