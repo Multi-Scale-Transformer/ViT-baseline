@@ -41,7 +41,7 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "bruh norm+mean 可视化尝试"
+    name: "只用group weight gp_num=49"
   aim:
     experiment: "nette"
 

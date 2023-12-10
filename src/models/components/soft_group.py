@@ -109,8 +109,8 @@ class SoftGroupAttention(nn.Module):
         self.gp = nn.Linear(dim, gp_num, bias=False)
         #self.Leakyrelu = nn.LeakyReLU() 
         self.gelu = nn.GELU()
-        self.alpha = nn.Parameter(torch.randn(()))
-        self.attn_scores = IdentityLayer()
+        # self.alpha = nn.Parameter(torch.randn(()))
+
         self.group_weight = IdentityLayer()
         self.attn_weights = IdentityLayer()
     def forward(self, x):
@@ -118,16 +118,7 @@ class SoftGroupAttention(nn.Module):
         qkv = self.qkv(x).chunk(3, dim=-1)
         
         q, k, v = [part.reshape(b, n, -1) for part in qkv]
-        q = torch.nn.functional.normalize(q, p=2, dim=2)
-        k = torch.nn.functional.normalize(k, p=2, dim=2)
-        q_mean = q.mean(dim=1, keepdim=True)
-        k_mean = k.mean(dim=1, keepdim=True)
-        
-        norm_mul = torch.matmul(q, k.transpose(-2, -1))
-        mean_mul = torch.matmul(q_mean, k_mean.transpose(-2, -1))
-        # Compute the dot products for the queries and keys (scaled)
-        attn_scores = (norm_mul + mean_mul) * self.scale
-        attn_scores = self.attn_scores(attn_scores)
+
         # min_val = torch.min(attn_scores, dim=-1, keepdim=True).values
         # max_val = torch.max(attn_scores, dim=-1, keepdim=True).values
 
@@ -138,10 +129,8 @@ class SoftGroupAttention(nn.Module):
         group_weight = F.softmax(group_weight, dim=-1)
         group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
         group_weight = self.group_weight(group_weight)
-        attn_scores = attn_scores * group_weight
-        attn_scores = F.softmax(attn_scores, dim=-1)
-        alpha = torch.sigmoid(self.alpha)
-        attn_weights = (1 - alpha)*attn_scores + alpha*group_weight
+
+        attn_weights = group_weight
 
         attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-8)
         attn_weights = self.attn_weights(attn_weights)               
