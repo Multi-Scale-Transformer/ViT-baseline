@@ -17,7 +17,7 @@ tags: ["nette", "vit"]
 seed: 10716
 
 trainer:
-  min_epochs: 3
+  min_epochs: 1
   max_epochs: 100
   gradient_clip_val: 0.5
   deterministic: True
@@ -41,6 +41,9 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "bruh错误dim norm+mean"
+    name: "bruh norm+mean 可视化尝试"
   aim:
     experiment: "nette"
+
+
+# ckpt_path: '/root/workspace/lightning-hydra-template/logs/train/runs/[bruh norm+mean]2023-12-09_06-00-17/checkpoints/epoch_061.ckpt'

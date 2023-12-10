@@ -4,6 +4,15 @@ from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
 import torch.nn.functional as F
 import torch.nn.init as init
+
+
+class IdentityLayer(nn.Module):
+    def __init__(self):
+        super(IdentityLayer, self).__init__()
+
+    def forward(self, x):
+        return x  # 直接返回输入数据，不做任何改变
+
 class PatchEmbedding(nn.Module):
     def __init__(self, image_size, patch_size, dim, channels):
         super().__init__()
@@ -101,8 +110,9 @@ class SoftGroupAttention(nn.Module):
         #self.Leakyrelu = nn.LeakyReLU() 
         self.gelu = nn.GELU()
         self.alpha = nn.Parameter(torch.randn(()))
-        
-        
+        self.attn_scores = IdentityLayer()
+        self.group_weight = IdentityLayer()
+        self.attn_weights = IdentityLayer()
     def forward(self, x):
         b, n, _ = x.shape
         qkv = self.qkv(x).chunk(3, dim=-1)
@@ -117,7 +127,7 @@ class SoftGroupAttention(nn.Module):
         mean_mul = torch.matmul(q_mean, k_mean.transpose(-2, -1))
         # Compute the dot products for the queries and keys (scaled)
         attn_scores = (norm_mul + mean_mul) * self.scale
-        
+        attn_scores = self.attn_scores(attn_scores)
         # min_val = torch.min(attn_scores, dim=-1, keepdim=True).values
         # max_val = torch.max(attn_scores, dim=-1, keepdim=True).values
 
@@ -127,13 +137,14 @@ class SoftGroupAttention(nn.Module):
         group_weight = self.gelu(group_weight)
         group_weight = F.softmax(group_weight, dim=-1)
         group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
-        
+        group_weight = self.group_weight(group_weight)
         attn_scores = attn_scores * group_weight
         attn_scores = F.softmax(attn_scores, dim=-1)
         alpha = torch.sigmoid(self.alpha)
         attn_weights = (1 - alpha)*attn_scores + alpha*group_weight
 
-        attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-8)                
+        attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-8)
+        attn_weights = self.attn_weights(attn_weights)               
         # Apply dropout to the attention weights
         attn_weights = self.dropout(attn_weights)
         
