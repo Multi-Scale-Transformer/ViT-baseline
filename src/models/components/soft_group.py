@@ -103,10 +103,10 @@ class SoftGroupAttention(nn.Module):
         self.dim = dim
         self.scale = dim ** -0.5  # Scale factor for the dot products
         
-        self.qkv = nn.Linear(dim, dim * 3)
+        self.v = nn.Linear(dim, dim)
         self.project = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
-        self.gp = nn.Linear(dim, gp_num, bias=False)
+        self.gp = nn.Linear(dim, dim, bias=False)
         #self.Leakyrelu = nn.LeakyReLU() 
         self.gelu = nn.GELU()
         # self.alpha = nn.Parameter(torch.randn(()))
@@ -115,10 +115,8 @@ class SoftGroupAttention(nn.Module):
         self.attn_weights = IdentityLayer()
     def forward(self, x):
         b, n, _ = x.shape
-        qkv = self.qkv(x).chunk(3, dim=-1)
-        
-        q, k, v = [part.reshape(b, n, -1) for part in qkv]
 
+        v = self.v(x)
         # min_val = torch.min(attn_scores, dim=-1, keepdim=True).values
         # max_val = torch.max(attn_scores, dim=-1, keepdim=True).values
 

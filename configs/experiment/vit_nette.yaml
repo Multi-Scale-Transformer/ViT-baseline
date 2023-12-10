@@ -29,7 +29,7 @@ trainer:
 
 model:
   optimizer:
-    lr: 0.0004
+    lr: 4e-4
   compile: false
 
 data:
@@ -41,9 +41,8 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "只用group weight gp_num=49"
+    name: "纯gp gp_num=dim"
   aim:
     experiment: "nette"
 
 
-# ckpt_path: '/root/workspace/lightning-hydra-template/logs/train/runs/[bruh norm+mean]2023-12-09_06-00-17/checkpoints/epoch_061.ckpt'
