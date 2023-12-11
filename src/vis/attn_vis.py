@@ -3,6 +3,7 @@ root = '/root/workspace/lightning-hydra-template'
 sys.path.append(root)
 
 
+import cv2
 
 from src.models.components.soft_group import ViT
 from src.models.nette_module import NetteLitModule
@@ -22,57 +23,84 @@ import torch.nn.functional as F
 font_path = '/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf'
 font_prop = font_manager.FontProperties(fname=font_path, size=12)  # 可以指定字体大小
 
-def visualize_attention_weights(extractor, img_path, save_path='attention_map.png'):
+def visualize_attention_weights(extractor, img_path, save_path='attention_map.png', alpha=0.7, contrast_factor=0.5):
     test_transforms = transforms.Compose([
-        transforms.Resize((224, 224)),  # Resize images to common size
-        transforms.ToTensor(),  # Convert images to PyTorch tensors
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize images
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     
-    img = Image.open(img_path)
-    # input = Image.new('RGB', (448, 448), (255, 255, 255))
-    img = test_transforms(img)
-    img = img.unsqueeze(0)  # 添加batch维度
+    # Open the image file
+    img_ori = Image.open(img_path).convert("RGB")
+    img = test_transforms(img_ori)
+    img = img.unsqueeze(0)
     
+    # Assume 'device' is defined somewhere
+    # e.g., device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     img = img.to(device=device, dtype=torch.bfloat16)
-    # 将图像输入模型以收集注意力权重
     with torch.no_grad():
-        attention_maps = extractor(image)
+        attention_maps = extractor(img)
     
-    # 获取attn_weights部分
     attn_weights = attention_maps['attn_weights']
     num_layers = len(attn_weights)
     
-    # 创建一个大图，以便存储所有的热力图
-    fig, axes = plt.subplots(nrows=1, ncols=num_layers, figsize=(num_layers * 3, 3), dpi=100)
+    # Add an extra row for the cropped original image
+    fig, axes = plt.subplots(nrows=3, ncols=num_layers+1, figsize=((num_layers+1) * 3, 9), dpi=100)
     
-    # 遍历每层的注意力权重
+    # Set labels for the rows
+    row_labels = ['Attention Map', 'cls_token', 'Ori Image']
+    
     for col, feature in enumerate(attn_weights):
-        # 归一化注意力权重
-        attn_matrix = feature['output'].squeeze(0)  # 假设 batch size 是 1
+        attn_matrix = feature['output'].squeeze(0)
         attn_matrix = attn_matrix / attn_matrix.sum(dim=-1, keepdim=True)
         attn_matrix = attn_matrix.to(dtype=torch.float32).cpu().numpy()
-
-        # 绘制热力图
-        ax = axes[col]
-        im = ax.imshow(attn_matrix, cmap='coolwarm', aspect='auto')
         
-        # 关闭坐标轴提升清晰度
+        # Normalize cls_attn to enhance contrast
+        cls_attn = attn_matrix[0, 1:].reshape(14, 14)
+        min_val = cls_attn.min()
+        max_val = cls_attn.max()
+        cls_attn = (cls_attn - min_val) / (max_val - min_val)  # Normalize to [0, 1]
+        cls_attn = contrast_factor + (1 - contrast_factor) * cls_attn  # Scale to [contrast_factor, 1]
+        cls_attn_upsampled = np.kron(cls_attn, np.ones((16, 16)))
+        
+        # Plot the original attention map
+        ax = axes[0, col]
+        im = ax.imshow(attn_matrix, cmap='coolwarm', aspect='equal')
         ax.axis('off')
+        if col == 0:
+            ax.set_ylabel(row_labels[0], fontsize=16)
         
-        # 在子图上标注层数
-        ax.set_title(f'Layer {col+1}', fontsize=14, color='red')
+        # Overlay the upsampled cls_token attention map on the original image
+        ax = axes[1, col]
+        img_with_heatmap = np.array(img_ori)
+        img_with_heatmap = cv2.resize(img_with_heatmap, (224, 224))
+        heatmap = np.uint8(255 * cls_attn_upsampled)
+        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+        img_with_heatmap = cv2.addWeighted(img_with_heatmap, alpha, heatmap, 1 - alpha, 0)
+        ax.imshow(img_with_heatmap)
+        ax.axis('off')
+        if col == 0:
+            ax.set_ylabel(row_labels[1], fontsize=16)
+        
+        # Add a cropped original image
+        ax = axes[2, col]
+        cropped_img = cv2.resize(np.array(img_ori), (224, 224))  # Replace this with actual cropping logic if needed
+        ax.imshow(cropped_img)
+        ax.axis('off')
+        if col == 0:
+            ax.set_ylabel(row_labels[2], fontsize=16)
     
-    # 调整布局和添加颜色条
+    # Adjust the figure and add a colorbar
     fig.subplots_adjust(right=0.85, hspace=0.2, wspace=0.2)
     cbar_ax = fig.add_axes([0.87, 0.15, 0.03, 0.7])
     cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.ax.tick_params(labelsize=10)  # 设置颜色条刻度字体大小
-    cbar.ax.yaxis.set_ticks_position('left')  # 将颜色条刻度放置到左侧
+    cbar.ax.tick_params(labelsize=10)
+    cbar.ax.yaxis.set_ticks_position('left')
     
-    # 保存可视化结果
+    # Save and close the figure
     plt.savefig(save_path, format='png', bbox_inches='tight')
     plt.close(fig)
+    
 
 def print_module_attr_names(module, prefix=''):
     for name in module.__dict__:
@@ -123,8 +151,8 @@ if __name__ == '__main__':
 
 
     # Forward pass through the extractor, which will collect the intermediate features
-    intermediate_features = extractor(img)
+    # intermediate_features = extractor(img)
 
     visualize_attention_weights(extractor, img_path = "/root/SharedData/datasets/imagenette2/val/n01440764/ILSVRC2012_val_00009111.JPEG",
-                                image=img)
+                                )
 
