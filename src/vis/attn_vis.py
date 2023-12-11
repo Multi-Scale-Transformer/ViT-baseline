@@ -23,7 +23,7 @@ import torch.nn.functional as F
 font_path = '/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf'
 font_prop = font_manager.FontProperties(fname=font_path, size=12)  # 可以指定字体大小
 
-def visualize_attention_weights(extractor, img_path, save_path='attention_map.png', alpha=0.7, contrast_factor=0.5):
+def visualize_attention_weights(extractor, img_path, save_path='attention_map.png', alpha=0.8, contrast_factor=0.5):
     test_transforms = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -44,13 +44,13 @@ def visualize_attention_weights(extractor, img_path, save_path='attention_map.pn
     attn_weights = attention_maps['attn_weights']
     num_layers = len(attn_weights)
     
-    # Add an extra row for the cropped original image
+    # New subplot layout with labels in the first column
     fig, axes = plt.subplots(nrows=3, ncols=num_layers+1, figsize=((num_layers+1) * 3, 9), dpi=100)
     
     # Set labels for the rows
     row_labels = ['Attention Map', 'cls_token', 'Ori Image']
     
-    for col, feature in enumerate(attn_weights):
+    for col, feature in enumerate(attn_weights, start=2):  # Start from the third column
         attn_matrix = feature['output'].squeeze(0)
         attn_matrix = attn_matrix / attn_matrix.sum(dim=-1, keepdim=True)
         attn_matrix = attn_matrix.to(dtype=torch.float32).cpu().numpy()
@@ -64,14 +64,12 @@ def visualize_attention_weights(extractor, img_path, save_path='attention_map.pn
         cls_attn_upsampled = np.kron(cls_attn, np.ones((16, 16)))
         
         # Plot the original attention map
-        ax = axes[0, col]
+        ax = axes[0, col - 1]
         im = ax.imshow(attn_matrix, cmap='coolwarm', aspect='equal')
         ax.axis('off')
-        if col == 0:
-            ax.set_ylabel(row_labels[0], fontsize=16)
         
         # Overlay the upsampled cls_token attention map on the original image
-        ax = axes[1, col]
+        ax = axes[1, col - 1]
         img_with_heatmap = np.array(img_ori)
         img_with_heatmap = cv2.resize(img_with_heatmap, (224, 224))
         heatmap = np.uint8(255 * cls_attn_upsampled)
@@ -79,19 +77,22 @@ def visualize_attention_weights(extractor, img_path, save_path='attention_map.pn
         img_with_heatmap = cv2.addWeighted(img_with_heatmap, alpha, heatmap, 1 - alpha, 0)
         ax.imshow(img_with_heatmap)
         ax.axis('off')
-        if col == 0:
-            ax.set_ylabel(row_labels[1], fontsize=16)
         
         # Add a cropped original image
-        ax = axes[2, col]
+        ax = axes[2, col - 1]
         cropped_img = cv2.resize(np.array(img_ori), (224, 224))  # Replace this with actual cropping logic if needed
         ax.imshow(cropped_img)
         ax.axis('off')
-        if col == 0:
-            ax.set_ylabel(row_labels[2], fontsize=16)
     
-    # Adjust the figure and add a colorbar
+    # Place the labels in the first column of each row
+    for i, label in enumerate(row_labels):
+        axes[i, 0].axis('off')  # Turn off axis
+        axes[i, 0].text(0.5, 0.5, label, va='center', ha='center', fontsize=16, transform=axes[i, 0].transAxes)
+    
+    # Adjust the figure layout
     fig.subplots_adjust(right=0.85, hspace=0.2, wspace=0.2)
+    
+    # Add a colorbar
     cbar_ax = fig.add_axes([0.87, 0.15, 0.03, 0.7])
     cbar = fig.colorbar(im, cax=cbar_ax)
     cbar.ax.tick_params(labelsize=10)
