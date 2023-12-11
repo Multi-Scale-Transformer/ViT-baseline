@@ -106,7 +106,7 @@ class SoftGroupAttention(nn.Module):
         self.v = nn.Linear(dim, dim)
         self.project = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
-        self.gp = nn.Linear(dim, dim, bias=False)
+        self.gp = nn.Linear(dim, 10, bias=False)
         #self.Leakyrelu = nn.LeakyReLU() 
         self.gelu = nn.GELU()
         # self.alpha = nn.Parameter(torch.randn(()))
