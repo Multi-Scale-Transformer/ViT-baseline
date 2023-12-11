@@ -45,7 +45,7 @@ def visualize_attention_weights(extractor, img_path, save_path='attention_map.pn
     num_layers = len(attn_weights)
     
     # New subplot layout with labels in the first column
-    fig, axes = plt.subplots(nrows=3, ncols=num_layers+1, figsize=((num_layers+1) * 3, 9), dpi=100)
+    fig, axes = plt.subplots(nrows=3, ncols=num_layers+1, figsize=((num_layers+1) * 3, 9), dpi=300)
     
     # Set labels for the rows
     row_labels = ['Attention Map', 'cls_token', 'Ori Image']

@@ -1,0 +1,42 @@
+_target_: src.models.nette_module.NetteLitModule
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 1e-3
+  weight_decay: 0.0
+
+# scheduler:
+#   _target_: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
+#   _partial_: true
+#   warmup_epochs: 5
+#   max_epochs: 50
+#   warmup_start_lr: 2e-6
+#   eta_min: 2e-7
+
+
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 4
+
+
+
+net:
+  _target_: src.models.components.vit.ViT
+  image_size: 224
+  patch_size: 16
+  dim: 768
+  heads: 12
+  mlp_dim: 3072
+  dropout: 0.1
+
+
+
+
+
+# compile model for faster training with pytorch 2.0
+compile: false
