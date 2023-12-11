@@ -18,7 +18,7 @@ seed: 10716
 
 trainer:
   min_epochs: 5
-  max_epochs: 50
+  max_epochs: 20
   gradient_clip_val: 0.5
   deterministic: True
   # check_val_every_n_epoch: 10

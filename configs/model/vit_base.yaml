@@ -6,22 +6,17 @@ optimizer:
   lr: 1e-3
   weight_decay: 0.0
 
-# scheduler:
-#   _target_: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
-#   _partial_: true
-#   warmup_epochs: 5
-#   max_epochs: 50
-#   warmup_start_lr: 2e-6
-#   eta_min: 2e-7
-
-
-
 scheduler:
-  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _target_: pl_bolts.optimizers.lr_scheduler.LinearWarmupCosineAnnealingLR
   _partial_: true
-  mode: min
-  factor: 0.1
-  patience: 4
+  warmup_epochs: 5
+  max_epochs: 20
+  warmup_start_lr: 2e-6
+  eta_min: 2e-7
+
+
+
+
 
 
 
