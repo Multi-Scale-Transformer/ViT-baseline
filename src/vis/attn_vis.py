@@ -23,7 +23,7 @@ import torch.nn.functional as F
 font_path = '/usr/share/fonts/truetype/msttcorefonts/Times_New_Roman.ttf'
 font_prop = font_manager.FontProperties(fname=font_path, size=12)  # 可以指定字体大小
 
-def visualize_attention_weights(extractor, img_path, save_path='attention_map.png', alpha=0.8, contrast_factor=0.5):
+def visualize_attention_weights(extractor, img_path, save_path='attention_map.png', alpha=0.3, contrast_factor=0.5):
     test_transforms = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -68,13 +68,16 @@ def visualize_attention_weights(extractor, img_path, save_path='attention_map.pn
         im = ax.imshow(attn_matrix, cmap='coolwarm', aspect='equal')
         ax.axis('off')
         
-        # Overlay the upsampled cls_token attention map on the original image
+        # Convert the original image to grayscale
+        gray_img_ori = np.array(img_ori.convert('L'))
+        gray_img_ori = cv2.cvtColor(gray_img_ori, cv2.COLOR_GRAY2RGB)
+        gray_img_ori = cv2.resize(gray_img_ori, (224, 224))
+        
+        # Create a black and white heatmap
         ax = axes[1, col - 1]
-        img_with_heatmap = np.array(img_ori)
-        img_with_heatmap = cv2.resize(img_with_heatmap, (224, 224))
         heatmap = np.uint8(255 * cls_attn_upsampled)
-        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-        img_with_heatmap = cv2.addWeighted(img_with_heatmap, alpha, heatmap, 1 - alpha, 0)
+        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_GRAY2RGB)  # Convert grayscale heatmap to RGB
+        img_with_heatmap = cv2.addWeighted(gray_img_ori, alpha, heatmap, 1 - alpha, 0)
         ax.imshow(img_with_heatmap)
         ax.axis('off')
         
