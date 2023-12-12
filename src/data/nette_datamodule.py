@@ -15,9 +15,17 @@ class NetteDataModule(LightningDataModule):
     ) -> None:
         super().__init__()
         self.save_hyperparameters(logger=False)
-
+        self.train_transforms = transforms.Compose([
+            transforms.Resize((256, 256)),  # 先将图片放大到稍微比目标尺寸大一点的尺寸
+            transforms.RandomCrop((224, 224)),  # 随机裁剪到目标尺寸
+            transforms.RandomHorizontalFlip(),  # 随机水平翻转图片
+            transforms.RandomRotation(15),  # 随机旋转图片±15度
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),  # 随机调整亮度、对比度、饱和度和色调
+            transforms.ToTensor(),  # 将图片转换为PyTorch张量
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # 标准化
+        ])        
         # Define transforms here
-        self.transforms = transforms.Compose([
+        self.val_transforms = transforms.Compose([
             transforms.Resize((224, 224)),  # Resize images to common size
             transforms.ToTensor(),  # Convert images to PyTorch tensors
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize images
@@ -48,8 +56,8 @@ class NetteDataModule(LightningDataModule):
                 
             
         # Assuming data is already downloaded and located at self.hparams.data_dir
-        self.data_train = ImageFolder(root=f"{self.hparams.data_dir}/train", transform=self.transforms)
-        self.data_val = ImageFolder(root=f"{self.hparams.data_dir}/val", transform=self.transforms)
+        self.data_train = ImageFolder(root=f"{self.hparams.data_dir}/train", transform=self.train_transforms)
+        self.data_val = ImageFolder(root=f"{self.hparams.data_dir}/val", transform=self.val_transforms)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
