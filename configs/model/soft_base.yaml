@@ -3,7 +3,7 @@ _target_: src.models.nette_module.NetteLitModule
 optimizer:
   _target_: torch.optim.Adam
   _partial_: true
-  lr: 4e-4
+  lr: 2.5e-4
   weight_decay: 0.0
 
 scheduler:
@@ -19,11 +19,12 @@ net:
   _target_: src.models.components.soft_group.ViT
   image_size: 224
   patch_size: 16
-  dim: 192
-  heads: 3
-  mlp_dim: 768
+  dim: 768
+  heads: 12
+  mlp_dim: 3072
   dropout: 0.3
   attn_mode: 'single'
+  gp_num: 768
 
 
 

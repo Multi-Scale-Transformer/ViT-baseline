@@ -106,7 +106,7 @@ class SoftGroupAttention(nn.Module):
         self.v = nn.Linear(dim, dim)
         self.project = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
-        self.gp = nn.Linear(dim, 10, bias=False)
+        self.gp = nn.Linear(dim, gp_num, bias=False)
         #self.Leakyrelu = nn.LeakyReLU() 
         self.gelu = nn.GELU()
         # self.alpha = nn.Parameter(torch.randn(()))
@@ -188,7 +188,7 @@ class Transformer(nn.Module):
         return self.norm(x)
 
 class ViT(nn.Module):
-    def __init__(self, *, image_size=224, patch_size=16, num_classes=10, dim=192, depth=12, heads=3, mlp_dim=3072, channels=3, dropout=0.0, gp_num=49, attn_mode='single'):
+    def __init__(self, *, image_size=224, patch_size=16, num_classes=10, dim=192, depth=12, heads=3, mlp_dim=3072, channels=3, dropout=0.0, gp_num=10, attn_mode='single'):
         super().__init__()
         self.patch_embedding = PatchEmbedding(image_size, patch_size, dim, channels)
         self.transformer = Transformer(dim, depth, heads, mlp_dim, dropout, gp_num=gp_num, attn_mode=attn_mode)

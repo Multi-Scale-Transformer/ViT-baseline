@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: nette
-  - override /model: soft_group
+  - override /model: vit_tiny
   - override /callbacks: default
   - override /trainer: ddp
 
@@ -41,7 +41,7 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "纯gp gp_num=10"
+    name: "vit tiny"
   aim:
     experiment: "nette"
 

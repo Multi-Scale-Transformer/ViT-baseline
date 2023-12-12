@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: nette
-  - override /model: vit_base
+  - override /model: soft_base
   - override /callbacks: default
   - override /trainer: ddp
 
@@ -17,7 +17,7 @@ tags: ["nette", "vit"]
 seed: 10716
 
 trainer:
-  min_epochs: 5
+  min_epochs: 1
   max_epochs: 50
   gradient_clip_val: 0.5
   deterministic: True
@@ -40,8 +40,8 @@ logger:
     project: "ViT-baseline"
     entity: "dota109"
     tags: ${tags}
-    group: "nette base"
-    name: "ViT base"
+    group: "nette"
+    name: "soft base"
   aim:
     experiment: "nette"
 
