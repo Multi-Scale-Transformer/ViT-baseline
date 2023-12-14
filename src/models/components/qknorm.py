@@ -1,6 +1,17 @@
 import torch
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
+import torch.nn.functional as F
+
+class IdentityLayer(nn.Module):
+    def __init__(self):
+        super(IdentityLayer, self).__init__()
+
+    def forward(self, x):
+        return x  # 直接返回输入数据，不做任何改变
+
+
+
 class PatchEmbedding(nn.Module):
     def __init__(self, image_size, patch_size, dim, channels):
         super().__init__()
@@ -32,6 +43,7 @@ class MultiHeadAttention(nn.Module):
         self.project = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
         self.scale = self.head_dim ** -0.5
+        self.attn_weights = IdentityLayer()
 
     def forward(self, x):
         b, n, _, h = *x.shape, self.num_heads
@@ -40,9 +52,13 @@ class MultiHeadAttention(nn.Module):
         
         q, k, v = qkv
 
+        # Normalize q and k using p=2 norm
+        q_norm = F.normalize(q, p=2, dim=-1)
+        k_norm = F.normalize(k, p=2, dim=-1)
 
         # Use the PyTorch 2.0 function for scaled dot-product attention
         attn = scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout.p)
+        attn = self.attn_weights(attn)
         
         # Transpose and reshape the attention output to combine the heads
         out = attn.transpose(1, 2).reshape(b, n, -1)
@@ -63,7 +79,8 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        return self.net(x)
+        x = self.net(x)
+        return 0.5 * x + 0.5 * x.mean(dim=1, keepdim=True)
 
 class TransformerBlock(nn.Module):
     def __init__(self, dim, num_heads, mlp_dim, dropout):

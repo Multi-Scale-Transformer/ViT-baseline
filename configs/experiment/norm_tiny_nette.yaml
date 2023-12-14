@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: tiny_nette
-  - override /model: vit_tiny
+  - override /model: norm_tiny
   - override /callbacks: default
   - override /trainer: ddp
 
@@ -40,7 +40,7 @@ logger:
     project: "ViT-baseline 已炼丹版"
     entity: "dota109"
     tags: ${tags}
-    name: "vit-tiny-single-baseline"
+    name: "x+xmean-tiny-multi"
   aim:
     experiment: "nette"
 

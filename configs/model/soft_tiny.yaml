@@ -22,9 +22,9 @@ net:
   dim: 192
   heads: 3
   mlp_dim: 768
-  dropout: 0.3
+  dropout: 0.1
   attn_mode: 'single'
-  gp_num: 192
+  gp_num: 10
 
 
 

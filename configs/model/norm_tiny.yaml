@@ -15,11 +15,11 @@ scheduler:
   eta_min: 4e-6
 
 net:
-  _target_: src.models.components.vit.ViT
+  _target_: src.models.components.qknorm.ViT
   image_size: 224
   patch_size: 16
   dim: 192
-  heads: 1
+  heads: 3
   mlp_dim: 768
   dropout: 0.1
 

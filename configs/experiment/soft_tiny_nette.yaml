@@ -41,7 +41,7 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "soft tiny"
+    name: "soft tiny 测试"
   aim:
     experiment: "nette"
 
