@@ -31,17 +31,20 @@ model:
   optimizer:
     lr: 4e-4
   compile: false
+  net:
+    attn_mode: 'single'
+    gp_num: 10
 
 data:
   batch_size: 128
 
 logger:
   wandb:
-    project: "ViT-baseline"
+    project: "ViT-baseline 已炼丹版"
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "soft tiny 测试"
+    name: "a+b * scale"
   aim:
     experiment: "nette"
 

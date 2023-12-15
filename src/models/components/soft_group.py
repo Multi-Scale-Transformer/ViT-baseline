@@ -107,11 +107,9 @@ class SoftGroupAttention(nn.Module):
         self.project = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
         self.gp = nn.Linear(dim, gp_num, bias=False)
-        #self.Leakyrelu = nn.LeakyReLU() 
-        self.gelu = nn.GELU()
         self.alpha = nn.Parameter(torch.randn(()))
         # self.beta = nn.Parameter(torch.randn(()))
-        self.gamma = torch.tensor(1.0)
+        # self.gamma = nn.Parameter(torch.randn(()))
         
         
     def forward(self, x):
@@ -119,29 +117,26 @@ class SoftGroupAttention(nn.Module):
         qkv = self.qkv(x).chunk(3, dim=-1)
         
         q, k, v = [part.reshape(b, n, -1) for part in qkv]
-        q = torch.nn.functional.normalize(q, p=2, dim=-1)
-        k = torch.nn.functional.normalize(k, p=2, dim=-1)
-        q_mean = q.mean(dim=1, keepdim=True)
-        k_mean = k.mean(dim=1, keepdim=True)
-        
-        norm_mul = torch.matmul(q, k.transpose(-2, -1))
-        mean_mul = torch.matmul(q_mean, k_mean.transpose(-2, -1))
-        # Compute the dot products for the queries and keys (scaled)
-        attn_scores = (norm_mul + mean_mul) * self.scale
-        attn_ori = F.softmax(attn_scores, dim=-1)
-        
-        group_weight = self.gp(v)
-        group_weight = self.gelu(group_weight)
-        group_weight = F.softmax(group_weight, dim=-1)
-        group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
-        
-        attn_scores = attn_scores * group_weight
-        attn_scores = F.softmax(attn_scores, dim=-1)
-        gamma = torch.sigmoid(self.gamma)
-        alpha = (torch.sigmoid(self.alpha)) * (1-gamma)
 
         
-        attn_weights = alpha*attn_scores + (1-gamma-alpha)*group_weight + gamma*attn_ori
+
+        attn_scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+        # Compute the dot products for the queries and keys (scaled)
+
+        attn_ori = F.softmax(attn_scores, dim=-1)
+        
+        group_weight = self.gp(v)       
+        group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1)) * self.scale
+        group_weight = F.softmax(group_weight, dim=-1)
+        
+        # attn_scores = attn_scores * group_weight
+        # attn_scores = F.softmax(attn_scores, dim=-1)
+        alpha = torch.sigmoid(self.alpha)
+        # beta = torch.sigmoid(self.beta)
+        # gamma = torch.sigmoid(self.gamma)
+
+        
+        attn_weights = alpha * attn_ori + (1-alpha) * group_weight
 
         attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-8)                
         # Apply dropout to the attention weights
