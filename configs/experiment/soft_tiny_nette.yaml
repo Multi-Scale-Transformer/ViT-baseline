@@ -44,7 +44,7 @@ logger:
     entity: "dota109"
     tags: ${tags}
     group: "nette"
-    name: "a+b * scale"
+    name: "分头行动"
   aim:
     experiment: "nette"
 

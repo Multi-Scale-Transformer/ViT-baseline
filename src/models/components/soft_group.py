@@ -13,6 +13,14 @@ class IdentityLayer(nn.Module):
     def forward(self, x):
         return x  # 直接返回输入数据，不做任何改变
 
+
+class IdentityLayer(nn.Module):
+    def __init__(self):
+        super(IdentityLayer, self).__init__()
+
+    def forward(self, x):
+        return x  # 直接返回输入数据，不做任何改变
+
 class PatchEmbedding(nn.Module):
     def __init__(self, image_size, patch_size, dim, channels):
         super().__init__()
@@ -98,6 +106,63 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class SoftGroupAttention(nn.Module):
+    def __init__(self, dim, dropout=0.0, gp_num=49, head1_dim=None, head2_dim=None):
+        super().__init__()
+        self.dim = dim
+        self.scale = dim ** -0.5
+        
+        # Decide the dimensions for each head
+        head1_dim = 128
+        head2_dim = 192 - head1_dim
+        
+        self.head1_dim = head1_dim
+        self.head2_dim = head2_dim
+        
+        self.qkv_head1 = nn.Linear(dim, head1_dim * 3)
+        self.qkv_head2 = nn.Linear(dim, head2_dim * 3)
+        
+
+        
+        self.dropout = nn.Dropout(dropout)
+        self.gp = nn.Linear(head2_dim, head2_dim, bias=False)
+        
+        # Combine the outputs from both heads
+        self.final_project = nn.Linear(dim, dim)
+        
+    def forward(self, x):
+        b, n, _ = x.shape
+        
+        
+        # Head 1: Original self-attention
+        qkv_head1 = self.qkv_head1(x).chunk(3, dim=-1)
+        q_head1, k_head1, v_head1 = [part.reshape(b, n, -1) for part in qkv_head1]
+        attn_scores_head1 = torch.matmul(q_head1, k_head1.transpose(-2, -1)) * self.scale
+        attn_scores_head1 = F.softmax(attn_scores_head1, dim=-1)
+        attn_scores_head1 = self.dropout(attn_scores_head1)
+        attn_output_head1 = torch.matmul(attn_scores_head1, v_head1)
+
+        
+        # Head 2: Group attention
+        qkv_head2 = self.qkv_head2(x).chunk(3, dim=-1)
+        q_head2, k_head2, v_head2 = [part.reshape(b, n, -1) for part in qkv_head2]
+        
+        # Group attention weights
+        group_weight = self.gp(q_head2)
+        group_weight = F.softmax(group_weight, dim=-1)
+        group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
+        group_weight = group_weight / (group_weight.sum(dim=-1, keepdim=True) + 1e-8)
+        attn_output_head2 = torch.matmul(group_weight, v_head2)
+
+        
+        # Concatenate the outputs from both heads and project to original dimension
+        combined_out = torch.cat([attn_output_head1, attn_output_head2], dim=-1)
+        out = self.final_project(combined_out)
+        
+        return out
+
+
+
+class SingleHeadAttention(nn.Module):
     def __init__(self, dim, dropout=0.0,gp_num=49):
         super().__init__()
         self.dim = dim
@@ -107,7 +172,8 @@ class SoftGroupAttention(nn.Module):
         self.project = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
         self.gp = nn.Linear(dim, gp_num, bias=False)
-        self.alpha = nn.Parameter(torch.randn(()))
+        self.attn_weights = IdentityLayer()
+        # self.alpha = nn.Parameter(torch.randn(()))
         # self.beta = nn.Parameter(torch.randn(()))
         # self.gamma = nn.Parameter(torch.randn(()))
         
@@ -118,25 +184,22 @@ class SoftGroupAttention(nn.Module):
         
         q, k, v = [part.reshape(b, n, -1) for part in qkv]
 
-        
+
 
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
-        # Compute the dot products for the queries and keys (scaled)
-
-        attn_ori = F.softmax(attn_scores, dim=-1)
-        
-        group_weight = self.gp(v)       
-        group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1)) * self.scale
-        group_weight = F.softmax(group_weight, dim=-1)
-        
-        # attn_scores = attn_scores * group_weight
-        # attn_scores = F.softmax(attn_scores, dim=-1)
-        alpha = torch.sigmoid(self.alpha)
-        # beta = torch.sigmoid(self.beta)
-        # gamma = torch.sigmoid(self.gamma)
+        attn_scores = F.softmax(attn_scores, dim=-1)
 
         
-        attn_weights = alpha * attn_ori + (1-alpha) * group_weight
+        group_weight = self.gp(v)   
+        group_weight = F.softmax(group_weight, dim=-1)    
+        group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
+        group_weight = group_weight / (group_weight.sum(dim=-1, keepdim=True) + 1e-8) * n
+        
+        
+
+        
+        attn_weights = attn_scores * group_weight
+        attn_weights = self.attn_weights(attn_weights)
 
         attn_weights = attn_weights / (attn_weights.sum(dim=-1, keepdim=True) + 1e-8)                
         # Apply dropout to the attention weights
@@ -149,8 +212,6 @@ class SoftGroupAttention(nn.Module):
         out = self.project(attn_output)
         
         return out
-
-
 
 
 class FeedForward(nn.Module):
