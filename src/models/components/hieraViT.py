@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
+
 class PatchEmbedding(nn.Module):
     def __init__(self, image_size, patch_size, dim, channels):
         super().__init__()
@@ -13,6 +14,19 @@ class PatchEmbedding(nn.Module):
         x = x.flatten(2)  # (B, D, H/P, W/P) -> (B, D, N)
         x = x.transpose(1, 2)  # (B, D, N) -> (B, N, D)
         x += self.pos_embedding
+        return x
+
+class Downsample(nn.Module):
+    def __init__(self, dim, dim_out):
+        super().__init__()
+        self.reduction = nn.Conv2d(dim, dim_out, kernel_size=3, stride=2, padding=1)
+
+    def forward(self, x):
+        B, N, D = x.shape
+        H = W = int(N ** 0.5)
+        x = x.permute(0, 2, 1).view(B, D, H, W)
+        x = self.reduction(x)
+        x = x.flatten(2).transpose(1, 2)
         return x
 
 class MultiHeadAttention(nn.Module):
@@ -45,8 +59,6 @@ class MultiHeadAttention(nn.Module):
         
         return self.project(out)
 
-
-
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout):
         super().__init__()
@@ -74,39 +86,49 @@ class TransformerBlock(nn.Module):
         x = self.ff(self.norm2(x)) + x
         return x
 
-class Transformer(nn.Module):
+class TransformerStage(nn.Module):
     def __init__(self, dim, depth, num_heads, mlp_dim, dropout):
         super().__init__()
         self.layers = nn.ModuleList([TransformerBlock(dim, num_heads, mlp_dim, dropout) for _ in range(depth)])
-        self.norm = nn.LayerNorm(dim)
 
     def forward(self, x):
         for layer in self.layers:
             x = layer(x)
-        return self.norm(x)
+        return x
 
-class ViT(nn.Module):
-    def __init__(self, *, image_size=224, patch_size=16, num_classes=10, dim=768, depth=12, heads=8, mlp_dim=3072, channels=3, dropout=0.1):
+class HierarchicalViT(nn.Module):
+    def __init__(self, *, image_size=224, num_classes=10, channels=3, dropout=0.1):
         super().__init__()
-        self.patch_embedding = PatchEmbedding(image_size, patch_size, dim, channels)
-        self.transformer = Transformer(dim, depth, heads, mlp_dim, dropout)
-        self.to_latent = nn.Identity()
-        self.pool = nn.AdaptiveAvgPool1d(1)
+        stages = [2, 2, 6, 2]
+        dims = [40, 80, 160, 320]
+        patch_sizes = [4, 2, 2, 2]
+        self.stages = nn.ModuleList()
+        self.downsamples = nn.ModuleList()
+        for i, (dim, stage, patch_size) in enumerate(zip(dims, stages, patch_sizes)):
+            if i == 0:
+                self.stages.append(PatchEmbedding(image_size, patch_size, dim, channels))
+            else:
+                self.stages.append(TransformerStage(dim, stage, 8, dim * 4, dropout))
+                self.downsamples.append(Downsample(dims[i-1], dim))
+            image_size //= patch_size
+
+        self.norm = nn.LayerNorm(dims[-1])
         self.mlp_head = nn.Sequential(
-            nn.LayerNorm(dim),
-            nn.Linear(dim, num_classes)
+            nn.Linear(dims[-1], num_classes)
         )
 
     def forward(self, x):
-        x = self.patch_embedding(x)
-        x = self.transformer(x)
-        x = x.transpose(1, 2)  # (B, N, D) -> (B, D, N)
-        x = self.pool(x).squeeze(-1)  # (B, D, N) -> (B, D, 1) -> (B, D)
-        x = self.to_latent(x)
+        for i, stage in enumerate(self.stages):
+            x = stage(x)
+            if i < len(self.downsamples):
+                x = self.downsamples[i](x)
+        x = self.norm(x.mean(dim=1))  # Global average pooling
         return self.mlp_head(x)
 
 if __name__ == '__main__':
-    model = ViT()
-    img = torch.randn(1, 3, 224, 224)
-    preds = model(img)
-    print(preds.shape)  # (1, num_classes)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = HierarchicalViT().to(device)
+    model.eval()
+    inputs = torch.randn(1, 3, 224, 224).to(device)
+    outputs = model(inputs)
+    print(outputs)

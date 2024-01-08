@@ -33,7 +33,7 @@ hydra:
     direction: maximize
 
     # total number of runs that will be executed
-    n_trials: 20
+    n_trials: 50
 
     # choose Optuna hyperparameter sampler
     # you can choose bayesian sampler (tpe), random search (without optimization), grid sampler, and others
@@ -41,11 +41,12 @@ hydra:
     sampler:
       _target_: optuna.samplers.TPESampler
       seed: 10716
-      n_startup_trials: 0 # number of random sampling runs before optimization starts
+      n_startup_trials: 10 # number of random sampling runs before optimization starts
 
     # define hyperparameter search space
     params:
-      model.optimizer.weight_decay: interval(1e-8, 1e-3)
+      model.net.t: interval(0.01, 7)
+      model.optimizer.lr: interval(5e-4, 7e-4)
       trainer.gradient_clip_val: interval(0.3, 3)
 
 

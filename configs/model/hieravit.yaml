@@ -14,17 +14,10 @@ scheduler:
   warmup_start_lr: 4e-7
   eta_min: 4e-6
 
-
 net:
-  _target_: src.models.components.soft_group.ViT
+  _target_: src.models.components.hieraViT.HierarchicalViT
   image_size: 224
-  patch_size: 16
-  dim: 192
-  heads: 1
-  mlp_dim: 768
-  dropout: 0.1
-  attn_mode: 'single'
-  gp_num: 10
+
 
 
 
