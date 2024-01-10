@@ -28,7 +28,7 @@ from timm.models.layers import trunc_normal_, DropPath
 from timm.models.registry import register_model
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.layers.helpers import to_2tuple
-from token_mixer import SoftgroupAttention
+from token_mixer import *
 
 
 
@@ -299,7 +299,7 @@ class Mlp(nn.Module):
 class MlpHead(nn.Module):
     """ MLP classification head
     """
-    def __init__(self, dim, num_classes=1000, mlp_ratio=4, act_layer=SquaredReLU,
+    def __init__(self, dim, num_classes=10, mlp_ratio=4, act_layer=SquaredReLU,
         norm_layer=nn.LayerNorm, head_dropout=0., bias=True):
         super().__init__()
         hidden_features = int(mlp_ratio * dim)
@@ -407,7 +407,7 @@ class MetaFormer(nn.Module):
                  depths=[2, 2, 6, 2],
                  dims=[64, 128, 320, 512],
                  downsample_layers=DOWNSAMPLE_LAYERS_FOUR_STAGES,
-                 token_mixers=SoftgroupAttention,
+                 token_mixers=[Attention, Attention, HardgroupAttention, HardgroupAttention],
                  mlps=Mlp,
                  norm_layers=partial(LayerNormWithoutBias, eps=1e-6), # partial(LayerNormGeneral, eps=1e-6, bias=False),
                  drop_path_rate=0.,
