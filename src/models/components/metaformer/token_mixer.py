@@ -121,6 +121,7 @@ class HardgroupAttention(nn.Module):
 
 if __name__ == '__main__':
     model = HardgroupAttention(dim=64)
+
     img = torch.randn(1, 56, 56, 64)
     preds = model(img)
     print(preds.shape)

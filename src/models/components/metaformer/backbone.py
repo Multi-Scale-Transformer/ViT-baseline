@@ -19,7 +19,9 @@ Some implementations are modified from timm (https://github.com/rwightman/pytorc
 """
 import sys
 sys.path.append('/root/workspace/ViT-baseline/src/models/components/metaformer/')
+sys.path.append('/root/workspace/ViT-baseline')
 from functools import partial
+from src.models.nette_module import NetteLitModule
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -407,7 +409,7 @@ class MetaFormer(nn.Module):
                  depths=[2, 2, 6, 2],
                  dims=[64, 128, 320, 512],
                  downsample_layers=DOWNSAMPLE_LAYERS_FOUR_STAGES,
-                 token_mixers=[Attention, Attention, HardgroupAttention, HardgroupAttention],
+                 token_mixers=[SepConv, SepConv, HardgroupAttention, HardgroupAttention],
                  mlps=Mlp,
                  norm_layers=partial(LayerNormWithoutBias, eps=1e-6), # partial(LayerNormGeneral, eps=1e-6, bias=False),
                  drop_path_rate=0.,
@@ -416,6 +418,7 @@ class MetaFormer(nn.Module):
                  res_scale_init_values=[None, None, 1.0, 1.0],
                  output_norm=partial(nn.LayerNorm, eps=1e-6), 
                  head_fn=nn.Linear,
+                 pretrained_ckpt='/root/workspace/ViT-baseline/logs/train/runs/2024-01-08_14-29-02/checkpoints/epoch_045.ckpt',
                  **kwargs,
                  ):
         super().__init__()
@@ -475,13 +478,29 @@ class MetaFormer(nn.Module):
         else:
             self.head = head_fn(dims[-1], num_classes)
 
-        self.apply(self._init_weights)
+        if pretrained_ckpt is not None:
+            ckpt = NetteLitModule.load_from_checkpoint(pretrained_ckpt, map_location='cpu')
+            pretrained_dict = ckpt.net.state_dict()
+            self._load_and_freeze(pretrained_dict)
+        else:
+            self.apply(self._init_weights)
 
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
             trunc_normal_(m.weight, std=.02)
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+                
+    def _load_and_freeze(self, ckpt_net):
+        # 载入同名的权重并冻结
+        model_dict = self.state_dict()
+        pretrained_dict = {k: v for k, v in ckpt_net.items() if k in model_dict}
+        model_dict.update(pretrained_dict)
+        self.load_state_dict(model_dict)
+
+        for name, param in self.named_parameters():
+            if name in pretrained_dict:
+                param.requires_grad = False
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -503,5 +522,6 @@ class MetaFormer(nn.Module):
 if __name__ == '__main__':
     model = MetaFormer()
     img = torch.randn(1, 3, 224, 224)
+    
     preds = model(img)
     print(preds.shape)  # (1, num_classes)
