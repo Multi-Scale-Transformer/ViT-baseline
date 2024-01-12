@@ -31,7 +31,8 @@ model:
   optimizer:
     lr: 4e-4
   compile: false
-
+  scheduler:
+    warmup_epochs: 10
 
 data:
   batch_size: 128
@@ -41,7 +42,7 @@ logger:
     project: "Metaformer-baseline"
     entity: "dota109"
     tags: ${tags}
-    name: "attn_baseline"
+    name: "CCSS from CCSS.gp 冻结gp"
   aim:
     experiment: "nette"
 

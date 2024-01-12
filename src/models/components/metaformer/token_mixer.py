@@ -2,6 +2,29 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+def softmax_with_temperature(logits, temperature=1.0):
+    """
+    Apply softmax with a temperature coefficient.
+
+    Parameters:
+    - logits: torch.Tensor, unnormalized log probabilities (often the output of a neural network layer)
+    - temperature: float, temperature coefficient, controls the smoothness of the output distribution
+
+    Returns:
+    - torch.Tensor, the probabilities after applying softmax with temperature
+    """
+    # 确保温度大于0，避免除以0或负数
+    assert temperature > 0, "Temperature must be positive"
+
+    # 除以温度参数
+    scaled_logits = logits / temperature
+
+    # 应用softmax
+    probs = F.softmax(scaled_logits, dim=-1)
+
+    return probs
+
+
 class SoftgroupAttention(nn.Module):
     """
     Modified Softgroup Attention incorporating elements from MultiHeadAttention in Code B.
@@ -27,7 +50,8 @@ class SoftgroupAttention(nn.Module):
         # Group parameter and additional functions
         self.gp_num = gp_num
         self.gp = nn.Linear(dim, gp_num, bias=False)
-
+        self.t = nn.Parameter(torch.ones(1))
+        self.softplus = nn.Softplus()
 
     def forward(self, x):
         B, H, W, C = x.shape
@@ -44,7 +68,8 @@ class SoftgroupAttention(nn.Module):
         gp = gp.unsqueeze(0).view(self.num_heads, self.gp_num, self.head_dim)
 
         group_weight = torch.einsum('bhnd,hmd->bhnm', q, gp)
-        group_weight = F.softmax(group_weight, dim=-1)
+        t = self.softplus(self.t)
+        group_weight = softmax_with_temperature(group_weight, temperature=t)
         group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
 
         attn_weights = attn_weights * group_weight
@@ -120,7 +145,7 @@ class HardgroupAttention(nn.Module):
         return x
 
 if __name__ == '__main__':
-    model = HardgroupAttention(dim=64)
+    model = SoftgroupAttention(dim=64)
 
     img = torch.randn(1, 56, 56, 64)
     preds = model(img)

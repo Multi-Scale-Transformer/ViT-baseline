@@ -409,7 +409,7 @@ class MetaFormer(nn.Module):
                  depths=[2, 2, 6, 2],
                  dims=[64, 128, 320, 512],
                  downsample_layers=DOWNSAMPLE_LAYERS_FOUR_STAGES,
-                 token_mixers=[SepConv, SepConv, HardgroupAttention, HardgroupAttention],
+                 token_mixers=[SepConv, SepConv, SoftgroupAttention, SoftgroupAttention],
                  mlps=Mlp,
                  norm_layers=partial(LayerNormWithoutBias, eps=1e-6), # partial(LayerNormGeneral, eps=1e-6, bias=False),
                  drop_path_rate=0.,
@@ -418,7 +418,7 @@ class MetaFormer(nn.Module):
                  res_scale_init_values=[None, None, 1.0, 1.0],
                  output_norm=partial(nn.LayerNorm, eps=1e-6), 
                  head_fn=nn.Linear,
-                 pretrained_ckpt='/root/workspace/ViT-baseline/logs/train/runs/2024-01-08_14-29-02/checkpoints/epoch_045.ckpt',
+                 pretrained_ckpt='/root/workspace/ViT-baseline/logs/train/runs/2024-01-10_09-12-06/checkpoints/epoch_048.ckpt',
                  **kwargs,
                  ):
         super().__init__()
@@ -494,13 +494,15 @@ class MetaFormer(nn.Module):
     def _load_and_freeze(self, ckpt_net):
         # 载入同名的权重并冻结
         model_dict = self.state_dict()
-        pretrained_dict = {k: v for k, v in ckpt_net.items() if k in model_dict}
+        # pretrained_dict = {k: v for k, v in ckpt_net.items() if k in model_dict}
+        pretrained_dict = {k: v for k, v in ckpt_net.items() if "gp" in k}
         model_dict.update(pretrained_dict)
         self.load_state_dict(model_dict)
 
         for name, param in self.named_parameters():
             if name in pretrained_dict:
                 param.requires_grad = False
+
 
     @torch.jit.ignore
     def no_weight_decay(self):

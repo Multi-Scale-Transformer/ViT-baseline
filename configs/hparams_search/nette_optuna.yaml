@@ -45,9 +45,8 @@ hydra:
 
     # define hyperparameter search space
     params:
-      model.net.t: interval(0.01, 7)
-      model.optimizer.lr: interval(5e-4, 7e-4)
-      trainer.gradient_clip_val: interval(0.3, 3)
+      model.scheduler.warmup_epochs: choice(1, 5, 10, 20)
+      model.optimizer.lr: interval(4e-5, 8e-4)
 
 
 
