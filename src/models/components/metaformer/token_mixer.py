@@ -89,12 +89,13 @@ class HardgroupAttention(nn.Module):
     Modified Softgroup Attention incorporating elements from MultiHeadAttention in Code B.
     """
     def __init__(self, dim, head_dim=32, num_heads=None, qkv_bias=False,
-        attn_drop=0., proj_drop=0., proj_bias=False, **kwargs):
+        attn_drop=0., proj_drop=0., proj_bias=False, group_mode='single', **kwargs):
         super().__init__()
 
         self.head_dim = head_dim
         self.scale = head_dim ** -0.5
-
+        self.group_mode = group_mode
+        
         self.num_heads = num_heads if num_heads else dim // head_dim
         if self.num_heads == 0:
             self.num_heads = 1
@@ -122,16 +123,29 @@ class HardgroupAttention(nn.Module):
         attn_weights = torch.matmul(q, k.transpose(-1, -2)) * self.scale
         attn_weights = F.softmax(attn_weights, dim=-1)
 
-        gp = self.gp.weight
-        gp = gp.unsqueeze(0).view(self.num_heads, self.gp_num, self.head_dim)
+       
+        if self.group_mode == 'multi':
+            gp = self.gp.weight
+            gp = gp.unsqueeze(0).view(self.num_heads, self.gp_num, self.head_dim)
+            group_weight = torch.einsum('bhnd,hmd->bhnm', q, gp)
+            _, idx = torch.topk(group_weight, k=1, dim=-1)
+            group_weight = torch.zeros_like(group_weight)
+            group_weight.scatter_(dim=-1, index=idx, value=1)
 
-        group_weight = torch.einsum('bhnd,hmd->bhnm', q, gp)
-        _, idx = torch.topk(group_weight, k=1, dim=-1)
-        group_weight = torch.zeros_like(group_weight)
-        group_weight.scatter_(dim=-1, index=idx, value=1)
-        group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
-        # 16 32 60 49
-        # keep_num = min(C//4, N)
+
+            group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
+        else:
+            b, h, n, d = q.shape
+            q_all_heads = q.permute(0, 2, 1, 3)
+            q_all_heads = q_all_heads.reshape(b, n, h*d)
+            group_weight = self.gp(q_all_heads)
+            _, idx = torch.topk(group_weight, k=1, dim=-1)
+            group_weight = torch.zeros_like(group_weight)
+            group_weight.scatter_(dim=-1, index=idx, value=1)
+            
+            group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
+            group_weight = group_weight.unsqueeze(1)
+            group_weight = group_weight.expand(b, h//2, n, n)
         
 
         attn_weights = attn_weights * group_weight
@@ -145,7 +159,7 @@ class HardgroupAttention(nn.Module):
         return x
 
 if __name__ == '__main__':
-    model = SoftgroupAttention(dim=64)
+    model = HardgroupAttention(dim=64)
 
     img = torch.randn(1, 56, 56, 64)
     preds = model(img)

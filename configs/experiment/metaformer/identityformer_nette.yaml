@@ -42,7 +42,7 @@ logger:
     project: "Metaformer-baseline"
     entity: "dota109"
     tags: ${tags}
-    name: "CCSS from CCSS.gp 冻结gp"
+    name: "CCHH+qkvg保留group_value"
   aim:
     experiment: "nette"
 
