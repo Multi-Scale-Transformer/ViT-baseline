@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import faiss
+import faiss.contrib.torch_utils
 def softmax_with_temperature(logits, temperature=1.0):
     """
     Apply softmax with a temperature coefficient.
@@ -131,8 +132,6 @@ class HardgroupAttention(nn.Module):
             _, idx = torch.topk(group_weight, k=1, dim=-1)
             group_weight = torch.zeros_like(group_weight)
             group_weight.scatter_(dim=-1, index=idx, value=1)
-
-
             group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
         else:
             b, h, n, d = q.shape
@@ -142,11 +141,13 @@ class HardgroupAttention(nn.Module):
             _, idx = torch.topk(group_weight, k=1, dim=-1)
             group_weight = torch.zeros_like(group_weight)
             group_weight.scatter_(dim=-1, index=idx, value=1)
-            
+            # group_weight_invert = ~group_weight
             group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
             group_weight = group_weight.unsqueeze(1)
             group_weight = group_weight.expand(b, h//2, n, n)
-        
+            invert_group_weight = torch.ones_like(group_weight) - group_weight
+            invert_group_weight = invert_group_weight.expand(b, h//2, n, n)
+            group_weight = torch.concat((group_weight, invert_group_weight), dim=1)
 
         attn_weights = attn_weights * group_weight
         attn_weights = attn_weights / (attn_weights.sum(dim=2, keepdim=True) + 1e-8)
@@ -158,9 +159,257 @@ class HardgroupAttention(nn.Module):
         x = self.proj_drop(x)
         return x
 
-if __name__ == '__main__':
-    model = HardgroupAttention(dim=64)
+class HardgroupAttentionV2(nn.Module):
+    """
+    Modified Softgroup Attention incorporating elements from MultiHeadAttention in Code B.
+    """
+    def __init__(self, dim, head_dim=32, num_heads=None, qkv_bias=False,
+        attn_drop=0., proj_drop=0., proj_bias=False, group_mode='multi', **kwargs):
+        super().__init__()
 
-    img = torch.randn(1, 56, 56, 64)
+        self.head_dim = head_dim
+        self.scale = head_dim ** -0.5
+        self.group_mode = group_mode
+        
+        self.num_heads = num_heads if num_heads else dim // head_dim
+        if self.num_heads == 0:
+            self.num_heads = 1
+        
+        self.attention_dim = self.num_heads * self.head_dim
+
+        self.qkv = nn.Linear(dim, self.attention_dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(self.attention_dim, dim, bias=proj_bias)
+        self.proj_drop = nn.Dropout(proj_drop)
+        gp_num = 5120 // dim
+        # Group parameter and additional functions
+        self.gp_num = gp_num
+        self.gp_q = nn.Linear(dim, gp_num, bias=False)
+        self.gp_k = nn.Linear(dim, gp_num, bias=False)
+
+
+    def forward(self, x):
+        B, H, W, C = x.shape
+
+        N = H * W
+        qkv = self.qkv(x).chunk(3, dim=-1)
+        qkv = [part.reshape(B, N, self.num_heads, -1).transpose(1, 2) for part in qkv]
+
+        q, k, v = qkv
+        attn_weights = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+        attn_weights = F.softmax(attn_weights, dim=-1)
+
+       
+        if self.group_mode == 'multi':
+            gp_q = self.gp_q.weight
+            gp_q = gp_q.unsqueeze(0).view(self.num_heads, self.gp_num, self.head_dim)
+            
+            gp_k = self.gp_k.weight
+            gp_k = gp_k.unsqueeze(0).view(self.num_heads, self.gp_num, self.head_dim)
+            
+            group_weight_q = torch.einsum('bhnd,hmd->bhnm', q, gp_q)
+            _, idx = torch.topk(group_weight_q, k=1, dim=-1)
+            group_weight_q = torch.zeros_like(group_weight_q)
+            group_weight_q.scatter_(dim=-1, index=idx, value=1)
+            
+            group_weight_k = torch.einsum('bhnd,hmd->bhnm', k, gp_k)
+            _, idx = torch.topk(group_weight_k, k=1, dim=-1)
+            group_weight_k = torch.zeros_like(group_weight_k)
+            group_weight_k.scatter_(dim=-1, index=idx, value=1)
+            
+            
+            group_weight = torch.matmul(group_weight_q, group_weight_k.transpose(-2, -1))
+        else:
+            b, h, n, d = q.shape
+            q_all_heads = q.permute(0, 2, 1, 3)
+            q_all_heads = q_all_heads.reshape(b, n, h*d)
+            group_weight = self.gp(q_all_heads)
+            _, idx = torch.topk(group_weight, k=1, dim=-1)
+            group_weight = torch.zeros_like(group_weight)
+            group_weight.scatter_(dim=-1, index=idx, value=1)
+            # group_weight_invert = ~group_weight
+            group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
+            group_weight = group_weight.unsqueeze(1)
+            group_weight = group_weight.expand(b, h//2, n, n)
+            invert_group_weight = torch.ones_like(group_weight) - group_weight
+            invert_group_weight = invert_group_weight.expand(b, h//2, n, n)
+            group_weight = torch.concat((group_weight, invert_group_weight), dim=1)
+
+        attn_weights = attn_weights * group_weight
+        attn_weights = attn_weights / (attn_weights.sum(dim=2, keepdim=True) + 1e-8)
+        attn_weights = self.attn_drop(attn_weights)
+
+        x = torch.matmul(attn_weights, v)
+        x = x.transpose(1, 2).reshape(B, H, W, -1)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+    
+    
+    
+class LeaderAttention(nn.Module):
+    """
+    Modified Softgroup Attention incorporating elements from MultiHeadAttention in Code B.
+    """
+    def __init__(self, dim, head_dim=32, num_heads=None, qkv_bias=False,
+        attn_drop=0., proj_drop=0., proj_bias=False, group_mode='multi', **kwargs):
+        super().__init__()
+
+        self.head_dim = head_dim
+        self.scale = head_dim ** -0.5
+        self.group_mode = group_mode
+        
+        self.num_heads = num_heads if num_heads else dim // head_dim
+        if self.num_heads == 0:
+            self.num_heads = 1
+        
+        self.attention_dim = self.num_heads * self.head_dim
+
+        self.qkv = nn.Linear(dim, self.attention_dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(self.attention_dim, dim, bias=proj_bias)
+        self.proj_drop = nn.Dropout(proj_drop)
+        leader_num = 5120 // dim
+        self.leader_num = leader_num
+        self.leader_token = nn.Linear(dim, leader_num, bias=False)
+
+    def forward(self, x):
+        B, H, W, C = x.shape
+
+        N = H * W
+        qkv = self.qkv(x).chunk(3, dim=-1)
+        qkv = [part.reshape(B, N, self.num_heads, -1).transpose(1, 2) for part in qkv]
+
+        q, k, v = qkv
+        attn_weights = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+        attn_weights = F.softmax(attn_weights, dim=-1)
+
+       
+        if self.group_mode == 'multi':
+            leader_token = self.leader_token.weight
+            leader_token = leader_token.unsqueeze(0).view(self.num_heads, self.leader_num, self.head_dim)
+            
+            
+            leader_attn = torch.einsum('bhnd,hmd->bhmn', k, leader_token)
+            mem = torch.einsum('bhnd,hmd->bhnm', q, leader_token)
+            
+            leader_weights = torch.matmul(mem, leader_attn)
+            keep_num = 2560 // self.attention_dim
+            _, idx = torch.topk(leader_weights, k=keep_num, dim=-1)
+            leader_weights = torch.zeros_like(leader_weights)
+            leader_weights.scatter_(dim=-1, index=idx, value=1)
+        else:
+            b, h, n, d = q.shape
+            q_all_heads = q.permute(0, 2, 1, 3)
+            q_all_heads = q_all_heads.reshape(b, n, h*d)
+            group_weight = self.gp(q_all_heads)
+            _, idx = torch.topk(group_weight, k=1, dim=-1)
+            group_weight = torch.zeros_like(group_weight)
+            group_weight.scatter_(dim=-1, index=idx, value=1)
+            group_weight = torch.matmul(group_weight, group_weight.transpose(-2, -1))
+            group_weight = group_weight.unsqueeze(1)
+            group_weight = group_weight.expand(b, h//2, n, n)
+
+
+
+        attn_weights = attn_weights * leader_weights
+        attn_weights = attn_weights / (attn_weights.sum(dim=2, keepdim=True) + 1e-8)
+        attn_weights = self.attn_drop(attn_weights)
+
+        x = torch.matmul(attn_weights, v)
+        x = x.transpose(1, 2).reshape(B, H, W, -1)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+    
+
+
+class Attention_qkv(nn.Module):
+    """
+    Vanilla self-attention from Transformer: https://arxiv.org/abs/1706.03762.
+    Modified from timm.
+    """
+    def __init__(self, dim, head_dim=32, num_heads=None, qkv_bias=False,
+        attn_drop=0., proj_drop=0., proj_bias=False, **kwargs):
+        super().__init__()
+
+        self.head_dim = head_dim
+        self.scale = head_dim ** -0.5
+
+        self.num_heads = num_heads if num_heads else dim // head_dim
+        if self.num_heads == 0:
+            self.num_heads = 1
+        
+        self.attention_dim = self.num_heads * self.head_dim
+
+        self.q = nn.Linear(dim, self.attention_dim, bias=qkv_bias)
+        self.k = nn.Linear(dim, self.attention_dim, bias=qkv_bias)
+        self.v = nn.Linear(dim, self.attention_dim, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(self.attention_dim, dim, bias=proj_bias)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        
+    def forward(self, x):
+        B, H, W, C = x.shape
+        N = H * W
+        q = self.q(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        k = self.k(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        v = self.v(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, H, W, self.attention_dim)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+
+class Attention_v(nn.Module):
+    """
+    Vanilla self-attention from Transformer: https://arxiv.org/abs/1706.03762.
+    Modified from timm.
+    """
+    def __init__(self, dim, head_dim=32, num_heads=None, qkv_bias=False,
+        attn_drop=0., proj_drop=0., proj_bias=False, **kwargs):
+        super().__init__()
+
+        self.head_dim = head_dim
+        self.scale = head_dim ** -0.5
+
+        self.num_heads = num_heads if num_heads else dim // head_dim
+        if self.num_heads == 0:
+            self.num_heads = 1
+        
+        self.attention_dim = self.num_heads * self.head_dim
+
+        self.v = nn.Linear(dim, self.attention_dim, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(self.attention_dim, dim, bias=proj_bias)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        
+    def forward(self, x):
+        B, H, W, C = x.shape
+        N = H * W
+
+        # Process only the 'value' part
+        v = self.v(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        # Since we are not using query and key, we can directly use the value
+        x = v.transpose(1, 2).reshape(B, H, W, self.attention_dim)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+
+
+
+if __name__ == '__main__':
+    model = Attention_v(dim=64)
+
+    img = torch.randn(2, 56, 56, 64)
     preds = model(img)
     print(preds.shape)
