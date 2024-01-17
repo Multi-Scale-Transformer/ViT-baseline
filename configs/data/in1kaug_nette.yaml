@@ -1,0 +1,5 @@
+_target_: src.data.nette_datamodule_in1kaug.NetteDataModule
+data_dir: /root/SharedData/datasets/imagenette2
+batch_size: 128 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+num_workers: 16
+pin_memory: True
