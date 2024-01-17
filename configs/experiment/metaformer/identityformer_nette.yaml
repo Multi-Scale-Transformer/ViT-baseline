@@ -16,6 +16,8 @@ tags: ["nette", "vit"]
 
 seed: 10716
 
+data_dir: /root/SharedData/datasets/imagewoof2
+
 trainer:
   min_epochs: 1
   max_epochs: 50
@@ -36,14 +38,15 @@ model:
 
 data:
   batch_size: 128
+  data_dir: /root/SharedData/datasets/imagewoof2
 
 logger:
   wandb:
-    project: "Metaformer-baseline"
+    project: "套娃former"
     entity: "dota109"
     tags: ${tags}
-    name: "CCAqkvAqkv(load CCAvAv(load CCAqkvAqkv(load CCAvAv)))"
+    name: "[aug+]CAv18 3.0"
   aim:
-    experiment: "nette"
+    experiment: "woof"
 
 

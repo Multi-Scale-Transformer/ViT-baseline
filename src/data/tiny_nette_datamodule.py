@@ -17,14 +17,14 @@ class NetteDataModule(LightningDataModule):
         self.save_hyperparameters(logger=False)
         
         self.train_transforms = transforms.Compose([
-            transforms.Resize((256, 256)),  # 先将图片放大到稍微比目标尺寸大一点的尺寸
+            transforms.Resize((280, 280)),  # 先将图片放大到稍微比目标尺寸大一点的尺寸
             transforms.RandomCrop((224, 224)),  # 随机裁剪到目标尺寸
-            transforms.RandomHorizontalFlip(p=0.3),  # 随机水平翻转图片
-            transforms.RandomRotation(8),  # 随机旋转图片±15度
-            transforms.ColorJitter(brightness=0.03, contrast=0.03, saturation=0.03, hue=0.03),  # 随机调整亮度、对比度、饱和度和色调
+            transforms.RandomHorizontalFlip(p=0.7),  # 随机水平翻转图片
+            transforms.RandomRotation(20),  # 随机旋转图片±15度
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),  # 随机调整亮度、对比度、饱和度和色调
             transforms.ToTensor(),  # 将图片转换为PyTorch张量
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # 标准化
-        ]) 
+        ])  
         
         
         # Define transforms here
